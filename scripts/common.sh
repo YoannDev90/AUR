@@ -14,12 +14,13 @@ log()  { printf '==> %s\n' "$*"; }
 warn() { printf 'WARNING: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# Writes a GitHub step output when possible: the build user does not
-# always have the right to write to $GITHUB_OUTPUT.
-emit() {
-  if [[ -n "${GITHUB_OUTPUT:-}" && -w "${GITHUB_OUTPUT:-}" ]]; then
-    printf '%s\n' "$1" >>"$GITHUB_OUTPUT" || true
-  fi
+# Records a value for the workflow. A file is used instead of $GITHUB_OUTPUT:
+# the scripts run under `sudo -u builder`, and sudo strips $GITHUB_OUTPUT from
+# the environment. A separate root step reads .ci/<name>.
+set_output() {
+  local name="$1" value="$2"
+  mkdir -p "$CI_DIR"
+  printf '%s\n' "$value" >"$CI_DIR/$name"
 }
 
 # Prints the pkgbase declared by a folder's PKGBUILD (empty if unreadable).

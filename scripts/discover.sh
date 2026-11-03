@@ -2,8 +2,7 @@
 # Discovers the PKGBUILDs to build:
 #   1. the packages/<name>/PKGBUILD folders (detected automatically)
 #   2. the packages.txt entries (URL or local path)
-# Writes the list to .ci/packages.tsv and the discovered count to the
-# `count` step output.
+# Writes the list to .ci/packages.tsv and the discovered count to .ci/count.
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"

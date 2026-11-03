@@ -65,12 +65,15 @@ jobs:
 
       - name: Discover the PKGBUILDs
         id: discover
-        run: |
-          chmod 666 "$GITHUB_OUTPUT" || true
-          sudo -u builder -H bash scripts/discover.sh
+        # sudo strips $GITHUB_OUTPUT, so the script writes .ci/count instead.
+        run: sudo -u builder -H env GITHUB_ACTIONS=true bash scripts/discover.sh
+
+      - name: Read the discovery result
+        id: meta
+        run: echo "count=$(cat .ci/count 2>/dev/null || echo 0)" >> "$GITHUB_OUTPUT"
 
       - name: Restore already built binaries
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         id: cache
         uses: actions/cache/restore@v6
         with:
@@ -80,27 +83,30 @@ jobs:
             pkgs-
 
       - name: Hand over to the build user
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         run: |
           set -euo pipefail
           if [[ -d pkgcache ]]; then chown -R builder:builder pkgcache; fi
 
       - name: Build the packages
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         id: build
-        run: |
-          chmod 666 "$GITHUB_OUTPUT" || true
-          sudo -u builder -H bash scripts/build.sh
+        run: sudo -u builder -H env GITHUB_ACTIONS=true bash scripts/build.sh
+
+      - name: Read the build result
+        if: steps.meta.outputs.count != '0'
+        id: result
+        run: echo "rebuilt=$(cat .ci/rebuilt 2>/dev/null || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Cache the binaries
-        if: steps.discover.outputs.count != '0' && steps.build.outputs.rebuilt == 'true'
+        if: steps.meta.outputs.count != '0' && steps.result.outputs.rebuilt == 'true'
         uses: actions/cache/save@v6
         with:
           path: pkgcache
           key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Publish the repository as an artifact
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         uses: actions/upload-artifact@v6
         with:
           name: repo-pacman
@@ -109,17 +115,17 @@ jobs:
           retention-days: 14
 
       - name: Configure GitHub Pages
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         uses: actions/configure-pages@v6
 
       - name: Package the repository for Pages
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         uses: actions/upload-pages-artifact@v5
         with:
           path: repo
 
       - name: Deploy to Pages
-        if: steps.discover.outputs.count != '0'
+        if: steps.meta.outputs.count != '0'
         id: deployment
         uses: actions/deploy-pages@v5
 
