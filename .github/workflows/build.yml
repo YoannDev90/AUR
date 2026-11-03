@@ -1,0 +1,135 @@
+name: Dépôt AUR binaire
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "packages/**"
+      - "packages.txt"
+      - "scripts/**"
+      - ".github/workflows/build.yml"
+  schedule:
+    # Build quotidien pour remonter les mises à jour AUR.
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuilder tous les paquets (ignore le cache)"
+        type: boolean
+        default: false
+      skip_pgp:
+        description: "Ignorer les signatures PGP des sources (--skippgpcheck)"
+        type: boolean
+        default: false
+      nocheck:
+        description: "Ne pas exécuter check() (--nocheck)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un seul build à la fois : le dépôt publié est un état global.
+concurrency:
+  group: aur-bin
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      FORCE_REBUILD: ${{ inputs.force == true && '1' || '0' }}
+      SKIP_PGP_CHECK: ${{ inputs.skip_pgp == true && '1' || '0' }}
+      NO_CHECK: ${{ inputs.nocheck == true && '1' || '0' }}
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v5
+
+      - name: Installer les outils de build
+        run: pacman -Syu --noconfirm --needed archlinux-keyring git curl sudo
+
+      - name: Créer l'utilisateur de build
+        # makepkg refuse de tourner en root : build en tant que `builder`
+        # avec un sudo sans mot de passe pour --syncdeps.
+        run: |
+          set -euo pipefail
+          useradd -m -s /bin/bash builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Découvrir les PKGBUILD
+        id: discover
+        run: |
+          chmod 666 "$GITHUB_OUTPUT" || true
+          sudo -u builder -H bash scripts/discover.sh
+
+      - name: Restaurer les binaires déjà construits
+        if: steps.discover.outputs.count != '0'
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: pkgcache
+          key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            pkgs-
+
+      - name: Donner la main à l'utilisateur de build
+        if: steps.discover.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          if [[ -d pkgcache ]]; then chown -R builder:builder pkgcache; fi
+
+      - name: Builder les paquets
+        if: steps.discover.outputs.count != '0'
+        id: build
+        run: |
+          chmod 666 "$GITHUB_OUTPUT" || true
+          sudo -u builder -H bash scripts/build.sh
+
+      - name: Mettre les binaires en cache
+        if: steps.discover.outputs.count != '0' && steps.build.outputs.rebuilt == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: pkgcache
+          key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publier le dépôt en artifact
+        if: steps.discover.outputs.count != '0'
+        uses: actions/upload-artifact@v6
+        with:
+          name: repo-pacman
+          path: repo/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Configurer GitHub Pages
+        if: steps.discover.outputs.count != '0'
+        uses: actions/configure-pages@v6
+
+      - name: Empaqueter le dépôt pour Pages
+        if: steps.discover.outputs.count != '0'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: repo
+
+      - name: Déployer sur Pages
+        if: steps.discover.outputs.count != '0'
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+      - name: Bilan
+        if: always()
+        run: |
+          if [[ -s .ci/failures.txt ]]; then
+            n="$(wc -l < .ci/failures.txt)"
+            echo "::error::${n} paquet(s) n'ont pas pu être buildé(s) — leur version n'est pas publiée."
+            sed 's/^/  - /' .ci/failures.txt
+            exit 1
+          fi
+          echo "Tous les paquets ont été buildés."

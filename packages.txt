@@ -1,0 +1,16 @@
+# Liste des PKGBUILDs à builder — une entrée par ligne.
+#
+# Deux formats acceptés :
+#
+#   1) Une URL (re-téléchargée à chaque run, donc toujours à jour) :
+#        https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=nom-du-paquet
+#        https://aur.archlinux.org/nom-du-paquet.git
+#        https://raw.githubusercontent.com/<orga>/<repo>/<branche>/PKGBUILD
+#
+#   2) Un chemin relatif au dépôt :
+#        packages/mon-outil/PKGBUILD
+#
+# Les dossiers packages/<nom>/ qui contiennent un PKGBUILD sont détectés
+# automatiquement : inutile de les lister ici.
+#
+# '#' commence un commentaire. Ce fichier peut rester vide.
