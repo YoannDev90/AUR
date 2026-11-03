@@ -1,4 +1,4 @@
-name: Dépôt AUR binaire
+name: AUR binary repository
 
 on:
   push:
@@ -9,20 +9,20 @@ on:
       - "scripts/**"
       - ".github/workflows/build.yml"
   schedule:
-    # Build quotidien pour remonter les mises à jour AUR.
+    # Daily build to pick up AUR updates.
     - cron: "30 4 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "Rebuilder tous les paquets (ignore le cache)"
+        description: "Rebuild all packages (ignore the cache)"
         type: boolean
         default: false
       skip_pgp:
-        description: "Ignorer les signatures PGP des sources (--skippgpcheck)"
+        description: "Skip PGP signatures of sources (--skippgpcheck)"
         type: boolean
         default: false
       nocheck:
-        description: "Ne pas exécuter check() (--nocheck)"
+        description: "Do not run check() (--nocheck)"
         type: boolean
         default: false
 
@@ -31,7 +31,7 @@ permissions:
   pages: write
   id-token: write
 
-# Un seul build à la fois : le dépôt publié est un état global.
+# Only one build at a time: the published repository is a global state.
 concurrency:
   group: aur-bin
   cancel-in-progress: false
@@ -48,28 +48,28 @@ jobs:
       SKIP_PGP_CHECK: ${{ inputs.skip_pgp == true && '1' || '0' }}
       NO_CHECK: ${{ inputs.nocheck == true && '1' || '0' }}
     steps:
-      - name: Récupérer le dépôt
+      - name: Check out the repository
         uses: actions/checkout@v5
 
-      - name: Installer les outils de build
+      - name: Install build tools
         run: pacman -Syu --noconfirm --needed archlinux-keyring git curl sudo
 
-      - name: Créer l'utilisateur de build
-        # makepkg refuse de tourner en root : build en tant que `builder`
-        # avec un sudo sans mot de passe pour --syncdeps.
+      - name: Create the build user
+        # makepkg refuses to run as root: build as `builder` with
+        # passwordless sudo for --syncdeps.
         run: |
           set -euo pipefail
           useradd -m -s /bin/bash builder
           echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
-      - name: Découvrir les PKGBUILD
+      - name: Discover the PKGBUILDs
         id: discover
         run: |
           chmod 666 "$GITHUB_OUTPUT" || true
           sudo -u builder -H bash scripts/discover.sh
 
-      - name: Restaurer les binaires déjà construits
+      - name: Restore already built binaries
         if: steps.discover.outputs.count != '0'
         id: cache
         uses: actions/cache/restore@v6
@@ -79,27 +79,27 @@ jobs:
           restore-keys: |
             pkgs-
 
-      - name: Donner la main à l'utilisateur de build
+      - name: Hand over to the build user
         if: steps.discover.outputs.count != '0'
         run: |
           set -euo pipefail
           if [[ -d pkgcache ]]; then chown -R builder:builder pkgcache; fi
 
-      - name: Builder les paquets
+      - name: Build the packages
         if: steps.discover.outputs.count != '0'
         id: build
         run: |
           chmod 666 "$GITHUB_OUTPUT" || true
           sudo -u builder -H bash scripts/build.sh
 
-      - name: Mettre les binaires en cache
+      - name: Cache the binaries
         if: steps.discover.outputs.count != '0' && steps.build.outputs.rebuilt == 'true'
         uses: actions/cache/save@v6
         with:
           path: pkgcache
           key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Publier le dépôt en artifact
+      - name: Publish the repository as an artifact
         if: steps.discover.outputs.count != '0'
         uses: actions/upload-artifact@v6
         with:
@@ -108,28 +108,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Configurer GitHub Pages
+      - name: Configure GitHub Pages
         if: steps.discover.outputs.count != '0'
         uses: actions/configure-pages@v6
 
-      - name: Empaqueter le dépôt pour Pages
+      - name: Package the repository for Pages
         if: steps.discover.outputs.count != '0'
         uses: actions/upload-pages-artifact@v5
         with:
           path: repo
 
-      - name: Déployer sur Pages
+      - name: Deploy to Pages
         if: steps.discover.outputs.count != '0'
         id: deployment
         uses: actions/deploy-pages@v5
 
-      - name: Bilan
+      - name: Summary
         if: always()
         run: |
           if [[ -s .ci/failures.txt ]]; then
             n="$(wc -l < .ci/failures.txt)"
-            echo "::error::${n} paquet(s) n'ont pas pu être buildé(s) — leur version n'est pas publiée."
+            echo "::error::${n} package(s) could not be built — their version is not published."
             sed 's/^/  - /' .ci/failures.txt
             exit 1
           fi
-          echo "Tous les paquets ont été buildés."
+          echo "All packages were built."

@@ -1,10 +1,10 @@
-# Sorties de build
+# Build outputs
 /build/
 /pkgcache/
 /repo/
 /.ci/
 
-# Artefacts makepkg générés en local
+# makepkg artifacts generated locally
 *.pkg.tar.*
 packages/*/src/
 packages/*/pkg/

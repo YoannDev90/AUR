@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Build les PKGBUILDs découverts par discover.sh puis assemble le dépôt
-# pacman dans repo/.
+# Builds the PKGBUILDs discovered by discover.sh then assembles the pacman
+# repository in repo/.
 #
-# Un binaire n'est reconstruit que si l'empreinte de son PKGBUILD (ou celle
-# des scripts) a changé : le reste est restauré depuis pkgcache/.
+# A binary is only rebuilt if the fingerprint of its PKGBUILD (or that of
+# the scripts) changed: everything else is restored from pkgcache/.
 #
-# Variables d'environnement :
-#   FORCE_REBUILD=1  tout rebuilder, ignore le cache
+# Environment variables:
+#   FORCE_REBUILD=1  rebuild everything, ignore the cache
 #   SKIP_PGP_CHECK=1 --skippgpcheck
 #   NO_CHECK=1       --nocheck
 #
-# Un PKGBUILD qui échoue est listé dans .ci/failures.txt mais n'empêche ni
-# la publication des autres paquets ni la fin du script.
+# A failing PKGBUILD is listed in .ci/failures.txt but neither prevents the
+# publication of the other packages nor the end of the script.
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 TSV="$CI_DIR/packages.tsv"
-[[ -s "$TSV" ]] || die "rien à builder (lance d'abord scripts/discover.sh)"
+[[ -s "$TSV" ]] || die "nothing to build (run scripts/discover.sh first)"
 
 mkdir -p "$CI_DIR" "$CACHE_DIR" "$LOG_DIR"
 
@@ -37,7 +37,7 @@ while IFS=$'\t' read -r base dir; do
   stamp="$(stamp_of "$dir")"
   expected="$(pkgname_count_of "$dir")"
   expected="${expected:-0}"
-  [[ "$expected" -gt 0 ]] || die "pkgname introuvable dans $dir/PKGBUILD"
+  [[ "$expected" -gt 0 ]] || die "pkgname not found in $dir/PKGBUILD"
 
   cache="$CACHE_DIR/$base"
   count=0
@@ -47,7 +47,7 @@ while IFS=$'\t' read -r base dir; do
 
   if [[ "$FORCE" != "1" && -f "$cache/.stamp" &&
     "$(cat "$cache/.stamp")" == "$stamp" && "$count" -ge "$expected" ]]; then
-    log "à jour: $base ($count paquet(s))"
+    log "up to date: $base ($count package(s))"
     kept=$((kept + 1))
     continue
   fi
@@ -68,7 +68,7 @@ while IFS=$'\t' read -r base dir; do
       built=$((built + 1))
     done
     if [[ "$built" -lt "$expected" ]]; then
-      warn "build incomplet pour $base ($built/$expected paquet(s)) — voir $logfile"
+      warn "incomplete build for $base ($built/$expected package(s)) — see $logfile"
       failures+=("$base")
       rm -rf "$staging"
       continue
@@ -77,33 +77,33 @@ while IFS=$'\t' read -r base dir; do
     mv "$staging" "$cache"
     printf '%s\n' "$stamp" >"$cache/.stamp"
     rebuilt=1
-    log "ok: $base ($built paquet(s))"
+    log "ok: $base ($built package(s))"
   else
-    warn "échec: $base — voir $logfile"
+    warn "failed: $base — see $logfile"
     tail -n 25 "$logfile" >&2 || true
     failures+=("$base")
   fi
 done <"$TSV"
 
-# 2. Bilan des échecs (avant l'assemblage, pour être visible même si la
-#    suite plante) -----------------------------------------------------------
+# 2. Failure report (before assembly, so it stays visible even if the
+#    rest crashes) -----------------------------------------------------------
 : >"$CI_DIR/failures.txt"
 if [[ "${#failures[@]}" -gt 0 ]]; then
   printf '%s\n' "${failures[@]}" | sort -u >"$CI_DIR/failures.txt"
   if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
     for failed in "${failures[@]}"; do
-      printf '::error::Échec de build: %s (voir .ci/logs/%s.log)\n' "$failed" "$failed"
+      printf '::error::Build failed: %s (see .ci/logs/%s.log)\n' "$failed" "$failed"
     done
   fi
 fi
 if [[ "$rebuilt" -eq 1 ]]; then
-  emit "rebuilt=true"
+  set_output rebuilt true
 else
-  emit "rebuilt=false"
+  set_output rebuilt false
 fi
 
-# 3. Assemblage du dépôt pacman -------------------------------------------
-log "assemblage du dépôt $REPO_NAME"
+# 3. Assemble the pacman repository ----------------------------------------
+log "assembling repository $REPO_NAME"
 rm -rf "$REPO_DIR"
 mkdir -p "$REPO_DIR"
 shopt -s nullglob
@@ -120,12 +120,12 @@ while IFS=$'\t' read -r base dir; do
   done
 done <"$TSV"
 
-[[ "${#pkg_files[@]}" -gt 0 ]] || die "aucun binaire à publier (tous les builds ont échoué ?)"
+[[ "${#pkg_files[@]}" -gt 0 ]] || die "no binary to publish (did every build fail?)"
 
 (cd "$REPO_DIR" && repo-add "$REPO_NAME.db.tar.gz" *.pkg.tar.*)
 
-# GitHub Pages ne suit pas les liens symboliques : on matérialise les raccourcis
-# .db / .files créés par repo-add en vrais fichiers.
+# GitHub Pages does not follow symbolic links: we materialize the
+# .db / .files shortcuts created by repo-add into real files.
 for link in "$REPO_DIR"/*.db "$REPO_DIR"/*.files; do
   if [[ -L "$link" ]]; then
     cp -L "$link" "$link.tmp"
@@ -135,7 +135,7 @@ done
 : >"$REPO_DIR/.nojekyll"
 shopt -u nullglob
 
-# 4. Purge du cache des paquets retirés du dépôt ---------------------------
+# 4. Purge the cache of packages removed from the repository ---------------
 cut -f1 "$CI_DIR/packages.tsv" | sort -u >"$CI_DIR/bases.txt"
 for cached in "$CACHE_DIR"/*/; do
   if [[ ! -d "$cached" ]]; then
@@ -143,10 +143,10 @@ for cached in "$CACHE_DIR"/*/; do
   fi
   name="$(basename "${cached%/}")"
   if ! grep -qxF "$name" "$CI_DIR/bases.txt"; then
-    log "purge du cache: $name"
+    log "purging cache: $name"
     rm -rf "$cached"
   fi
 done
 
-log "bilan: ${#pkg_files[@]} paquet(s) publié(s), $rebuilt rebuild(s), $kept à jour, ${#failures[@]} échec(s)"
-log "dépôt: $REPO_DIR"
+log "summary: ${#pkg_files[@]} package(s) published, $rebuilt rebuilt, $kept up to date, ${#failures[@]} failed"
+log "repository: $REPO_DIR"

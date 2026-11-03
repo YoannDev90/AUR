@@ -1,43 +1,43 @@
 #!/usr/bin/env bash
-# Helpers partagés par discover.sh et build.sh (fichier sourcé, pas exécuté).
+# Shared helpers used by discover.sh and build.sh (sourced file, not executed).
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${BUILD_DIR:-$ROOT/build}"     # PKGBUILDs récupérés par URL
-CACHE_DIR="${CACHE_DIR:-$ROOT/pkgcache}"  # binaires déjà construits (cache)
-REPO_DIR="${REPO_DIR:-$ROOT/repo}"        # dépôt pacman assemblé
-CI_DIR="${CI_DIR:-$ROOT/.ci}"             # métadonnées du run
+BUILD_DIR="${BUILD_DIR:-$ROOT/build}"     # PKGBUILDs fetched by URL
+CACHE_DIR="${CACHE_DIR:-$ROOT/pkgcache}"  # already built binaries (cache)
+REPO_DIR="${REPO_DIR:-$ROOT/repo}"        # assembled pacman repository
+CI_DIR="${CI_DIR:-$ROOT/.ci}"             # run metadata
 LOG_DIR="$CI_DIR/logs"
 MANIFEST="$ROOT/packages.txt"
 REPO_NAME="${REPO_NAME:-aur-bin}"
 
 log()  { printf '==> %s\n' "$*"; }
-warn() { printf 'AVERTISSEMENT: %s\n' "$*" >&2; }
-die()  { printf 'ERREUR: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'WARNING: %s\n' "$*" >&2; }
+die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# Écrit une sortie d'étape GitHub quand c'est possible : l'utilisateur de
-# build n'a pas toujours le droit d'écrire dans $GITHUB_OUTPUT.
+# Writes a GitHub step output when possible: the build user does not
+# always have the right to write to $GITHUB_OUTPUT.
 emit() {
   if [[ -n "${GITHUB_OUTPUT:-}" && -w "${GITHUB_OUTPUT:-}" ]]; then
     printf '%s\n' "$1" >>"$GITHUB_OUTPUT" || true
   fi
 }
 
-# Affiche le pkgbase déclaré par le PKGBUILD d'un dossier (vide si illisible).
+# Prints the pkgbase declared by a folder's PKGBUILD (empty if unreadable).
 pkgbase_of() {
   local dir="$1" info
   info="$(cd "$dir" && makepkg --printsrcinfo 2>/dev/null)" || return 0
   printf '%s\n' "$info" | sed -n 's/^[[:space:]]*pkgbase = //p'
 }
 
-# Nombre de paquets produits (1 en général, plusieurs pour un split package).
+# Number of packages produced (1 in general, several for a split package).
 pkgname_count_of() {
   local dir="$1" info
   info="$(cd "$dir" && makepkg --printsrcinfo 2>/dev/null)" || return 0
   printf '%s' "$info" | grep -c '^[[:space:]]*pkgname = ' || true
 }
 
-# Empreinte d'un PKGBUILD + des scripts du dépôt : si l'un des deux change,
-# le binaire doit être reconstruit.
+# Fingerprint of a PKGBUILD + of the repository scripts: if either changes,
+# the binary must be rebuilt.
 stamp_of() {
   local dir="$1"
   { cat "$dir/PKGBUILD"; cat "$ROOT"/scripts/*.sh; } | sha256sum | cut -d' ' -f1

@@ -1,18 +1,18 @@
-# Liste des PKGBUILDs à builder — une entrée par ligne.
+# List of PKGBUILDs to build — one entry per line.
 #
-# Deux formats acceptés :
+# Two accepted formats:
 #
-#   1) Une URL (re-téléchargée à chaque run, donc toujours à jour) :
-#        https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=nom-du-paquet
-#        https://aur.archlinux.org/nom-du-paquet.git
-#        https://raw.githubusercontent.com/<orga>/<repo>/<branche>/PKGBUILD
+#   1) A URL (re-downloaded on every run, therefore always up to date):
+#        https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=package-name
+#        https://aur.archlinux.org/package-name.git
+#        https://raw.githubusercontent.com/<orga>/<repo>/<branch>/PKGBUILD
 #
-#   2) Un chemin relatif au dépôt :
-#        packages/mon-outil/PKGBUILD
+#   2) A path relative to the repository:
+#        packages/my-tool/PKGBUILD
 #
-# Les dossiers packages/<nom>/ qui contiennent un PKGBUILD sont détectés
-# automatiquement : inutile de les lister ici.
+# packages/<name>/ folders containing a PKGBUILD are detected
+# automatically: no need to list them here.
 #
-# '#' commence un commentaire. Ce fichier peut rester vide.
+# '#' starts a comment. This file may stay empty.
 #
 https://github.com/YoannDev90/Github-Trend/releases/latest/download/PKGBUILD

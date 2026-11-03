@@ -1,104 +1,105 @@
-# AUR (binaires)
+# AUR (binaries)
 
-Ce dépôt **build les binaires des PKGBUILDs que tu listes** et publie un
-**dépôt pacman** complet (`aur-bin.db`, `aur-bin.files` + les paquets) sur
+This repository **builds the binaries of the PKGBUILDs you list** and publishes a
+**complete pacman repository** (`aur-bin.db`, `aur-bin.files` + the packages) on
 GitHub Pages.
 
-Ta seule action : ajouter un PKGBUILD, puis pousser.
+Your only action: add a PKGBUILD, then push.
 
-## Ajouter un package
+## Adding a package
 
-### 1. Le fichier directement dans un dossier
+### 1. The file directly in a folder
 
 ```text
 packages/
-└── mon-outil/
+└── my-tool/
     └── PKGBUILD
 ```
 
-Tout dossier `packages/*/` contenant un `PKGBUILD` est détecté
-automatiquement : `git add packages/mon-outil && git push`.
+Any `packages/*/` folder containing a `PKGBUILD` is detected
+automatically: `git add packages/my-tool && git push`.
 
-### 2. Une URL listée dans `packages.txt`
+### 2. A URL listed in `packages.txt`
 
 ```text
 https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=yay
 https://aur.archlinux.org/paru.git
-https://raw.githubusercontent.com/<orga>/<repo>/<branche>/PKGBUILD
-packages/mon-outil/PKGBUILD    # un chemin local marche aussi
+https://raw.githubusercontent.com/<orga>/<repo>/<branch>/PKGBUILD
+packages/my-tool/PKGBUILD    # a local path works too
 ```
 
-Les URL sont **re-téléchargées à chaque run** : tu récupères les mises à
-jour AUR sans rien changer dans le dépôt. Une URL qui se termine par `.git`
-est clonée, tout le reste est lu comme un fichier `PKGBUILD`.
+URLs are **re-downloaded on every run**: you get AUR updates without
+changing anything in the repository. A URL ending in `.git` is cloned,
+everything else is read as a `PKGBUILD` file.
 
-## Déroulé d'un build
+## Build flow
 
-1. **découverte** — `packages/*/PKGBUILD` + `packages.txt` → `.ci/packages.tsv`
-2. **build** — conteneur Arch, utilisateur non-root,
-   `makepkg --syncdeps --cleanbuild --clean` (les `depends` et
-   `makedepends` du PKGBUILD sont installés automatiquement)
-3. **cache** — un binaire n'est rebuild que si son PKGBUILD (ou un script
-   du dépôt) a changé ; le reste est restauré depuis le cache
-4. **dépôt** — `repo-add` génère `aur-bin.db` / `aur-bin.files` + les paquets
-5. **publication** — GitHub Pages + artifact `repo-pacman` (rétention 14 j)
-6. **quotidien** — un build part aussi tous les jours à 04 h 30 UTC pour
-   remonter les mises à jour AUR
+1. **discovery** — `packages/*/PKGBUILD` + `packages.txt` → `.ci/packages.tsv`
+2. **build** — Arch container, non-root user,
+   `makepkg --syncdeps --cleanbuild --clean` (the PKGBUILD's `depends` and
+   `makedepends` are installed automatically)
+3. **cache** — a binary is only rebuilt if its PKGBUILD (or a repository
+   script) changed; everything else is restored from the cache
+4. **repository** — `repo-add` generates `aur-bin.db` / `aur-bin.files` + the
+   packages
+5. **publish** — GitHub Pages + `repo-pacman` artifact (14-day retention)
+6. **daily** — a build also runs every day at 04:30 UTC to pick up AUR
+   updates
 
-Si un PKGBUILD échoue, les autres paquets sont **quand même publiés** ; le
-job finit en rouge et le nom du paquet fautif apparaît dans le bilan et
-dans l'onglet *Summary*.
+If a PKGBUILD fails, the other packages are **published anyway**; the job
+ends in red and the failing package name shows up in the summary and in the
+*Summary* tab.
 
-## Pré-réglage (une fois)
+## One-time setup
 
-**Settings → Pages → Build and deployment → Source : GitHub Actions.**
+**Settings → Pages → Build and deployment → Source: GitHub Actions.**
 
-Sans ça, le build passe mais le déploiement échoue.
+Without it, the build succeeds but the deployment fails.
 
-## Consommer le dépôt
+## Consuming the repository
 
-Dans `/etc/pacman.conf` :
+In `/etc/pacman.conf`:
 
 ```ini
 [AUR-bin]
-Server = https://<ton-utilisateur>.github.io/<ton-depot>
+Server = https://<your-user>.github.io/<your-repo>
 SigLevel = Optional TrustAll
 ```
 
-Puis `sudo pacman -Syu`.
+Then `sudo pacman -Syu`.
 
-- `SigLevel = Optional TrustAll` est **obligatoire** : les paquets ne sont
-  pas signés (aucune clé GPG à gérer), pacman les refuserait sinon.
-- L'URL dépend du nom du dépôt git (ex. dépôt `yoann/Documents/AUR` poussé
-  sur GitHub sous `yoann.github.io/AUR`).
+- `SigLevel = Optional TrustAll` is **required**: packages are unsigned (no
+  GPG key to manage), otherwise pacman would refuse them.
+- The URL depends on the git repository name (e.g. repo `yoann/Documents/AUR`
+  pushed to GitHub as `yoann.github.io/AUR`).
 
-## Forcer / déboguer
+## Forcing / debugging
 
-*Actions → « Dépôt AUR binaire » → Run workflow* :
+*Actions → "AUR binary repository" → Run workflow*:
 
-| option     | effet                                             |
+| option     | effect                                            |
 | ---------- | ------------------------------------------------- |
-| `force`    | rebuild **tous** les paquets, ignore le cache      |
-| `skip_pgp` | `--skippgpcheck` si une clé PGP des sources manque |
-| `nocheck`  | `--nocheck` si `check()` casse dans la CI          |
+| `force`    | rebuild **all** packages, ignore the cache        |
+| `skip_pgp` | `--skippgpcheck` if a source PGP key is missing   |
+| `nocheck`  | `--nocheck` if `check()` breaks in CI             |
 
-Logs de chaque paquet : onglet *Summary* du run, et `.ci/logs/<nom>.log`
-dans l'artifact. En local (Arch + `base-devel` requis) :
+Logs for each package: the run's *Summary* tab, and `.ci/logs/<name>.log`
+in the artifact. Locally (Arch + `base-devel` required):
 
 ```sh
 bash scripts/discover.sh
-bash scripts/build.sh     # résultats dans repo/
+bash scripts/build.sh     # results in repo/
 ```
 
-## Limites
+## Limitations
 
-- **Paquets non signés** — cf. `SigLevel` ci-dessus.
-- **Paquets VCS** (`-git`, `-svn`) — le PKGBUILD ne change pas quand
-  l'amont bouge : ils ne sont rebuildés que sur `force` ou quand le
-  PKGBUILD est modifié.
-- **Dépendances non déclarées** — seuls `depends` / `makedepends` du
-  PKGBUILD sont installés ; un outil supposé déjà présent fera échouer le
-  build (utilise `nocheck` / `skip_pgp` si besoin).
-- **Taille** — GitHub Pages est pensé pour ~1 Go ; au-delà, le script
-  produit déjà un dépôt pacman standard, un simple `rsync` vers un autre
-  hébergement suffit.
+- **Unsigned packages** — see `SigLevel` above.
+- **VCS packages** (`-git`, `-svn`) — the PKGBUILD doesn't change when
+  upstream does: they are only rebuilt on `force` or when the PKGBUILD is
+  modified.
+- **Undeclared dependencies** — only the PKGBUILD's `depends` /
+  `makedepends` are installed; a tool assumed to be already present will
+  break the build (use `nocheck` / `skip_pgp` if needed).
+- **Size** — GitHub Pages is designed for ~1 GB; beyond that, the script
+  already produces a standard pacman repository, a plain `rsync` to another
+  host is enough.
