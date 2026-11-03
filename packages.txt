@@ -14,3 +14,5 @@
 # automatiquement : inutile de les lister ici.
 #
 # '#' commence un commentaire. Ce fichier peut rester vide.
+#
+https://github.com/YoannDev90/Github-Trend/releases/latest/download/PKGBUILD
