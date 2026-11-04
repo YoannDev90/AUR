@@ -57,6 +57,9 @@ jobs:
       FORCE_REBUILD: ${{ inputs.force == true && '1' || '0' }}
       SKIP_PGP_CHECK: ${{ inputs.skip_pgp == true && '1' || '0' }}
       NO_CHECK: ${{ inputs.nocheck == true && '1' || '0' }}
+      # A -git PKGBUILD is identical upstream from one day to the next:
+      # refresh those on the daily run only.
+      FORCE_VCS: ${{ github.event_name == 'schedule' && '1' || '0' }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5

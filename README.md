@@ -105,6 +105,7 @@ The same options exist as environment variables for a local run:
 | `FORCE_REBUILD=1`  | rebuild every package, ignore the cache       |
 | `SKIP_PGP_CHECK=1` | pass `--skippgpcheck` to makepkg              |
 | `NO_CHECK=1`       | pass `--nocheck` to makepkg                   |
+| `FORCE_VCS=1`      | also rebuild `*-git` / `*-svn` / `*-hg` pkgs  |
 | `REPO_NAME=<name>` | name of the generated `*.db` / `*.files`      |
 
 Locally (Arch + `base-devel` required, **as a normal user**: makepkg refuses
@@ -119,8 +120,8 @@ bash scripts/build.sh     # results in repo/
 
 - **Unsigned packages** — see `SigLevel` above.
 - **VCS packages** (`-git`, `-svn`) — the PKGBUILD doesn't change when
-  upstream does: they are only rebuilt on `force` or when the PKGBUILD is
-  modified.
+  upstream does: they are rebuilt by the daily schedule (`FORCE_VCS=1`), on
+  `force`, or when the PKGBUILD is modified.
 - **Undeclared dependencies** — only the PKGBUILD's `depends` /
   `makedepends` are installed; a tool assumed to be already present will
   break the build (use `nocheck` / `skip_pgp` if needed).

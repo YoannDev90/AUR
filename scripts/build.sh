@@ -7,6 +7,7 @@
 #
 # Environment variables:
 #   FORCE_REBUILD=1  rebuild everything, ignore the cache
+#   FORCE_VCS=1      also rebuild *-git / *-svn / *-hg / *-bzr packages
 #   SKIP_PGP_CHECK=1 --skippgpcheck
 #   NO_CHECK=1       --nocheck
 #
@@ -22,6 +23,7 @@ TSV="$CI_DIR/packages.tsv"
 mkdir -p "$CI_DIR" "$CACHE_DIR" "$LOG_DIR"
 
 FORCE="${FORCE_REBUILD:-0}"
+FORCE_VCS="${FORCE_VCS:-0}"
 extra_flags=()
 if [[ "${SKIP_PGP_CHECK:-0}" == "1" ]]; then extra_flags+=(--skippgpcheck); fi
 if [[ "${NO_CHECK:-0}" == "1" ]]; then extra_flags+=(--nocheck); fi
@@ -47,7 +49,16 @@ while IFS=$'\t' read -r base dir; do
     count="$(find "$cache" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' | wc -l)"
   fi
 
-  if [[ "$FORCE" != "1" && -f "$cache/.stamp" &&
+  # A VCS package does not change when upstream does: its PKGBUILD is
+  # byte-identical from one day to the next, so the cache would keep it
+  # forever. FORCE_VCS (set by the daily schedule) bypasses the cache for
+  # those only.
+  vcs=0
+  if [[ "$FORCE_VCS" == "1" && "$base" =~ -(git|svn|hg|bzr)$ ]]; then
+    vcs=1
+  fi
+
+  if [[ "$FORCE" != "1" && "$vcs" != "1" && -f "$cache/.stamp" &&
     "$(cat "$cache/.stamp")" == "$stamp" && "$count" -ge "$expected" ]]; then
     log "up to date: $base ($count package(s))"
     STATUS[$base]="up to date ($count package(s))"
