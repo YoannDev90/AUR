@@ -26,23 +26,24 @@ on:
         type: boolean
         default: false
 
+# Least privilege: only the deploy job may write to Pages or mint an OIDC
+# token. The build job — which executes PKGBUILDs downloaded from the
+# network — keeps read-only access to the repository.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Only one build at a time: the published repository is a global state.
+# The published repository is a global state: never two builds at once for
+# the same ref (push, schedule and manual runs of a branch share a group).
 concurrency:
-  group: aur-bin
+  group: aur-bin-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      count: ${{ steps.meta.outputs.count }}
     env:
       FORCE_REBUILD: ${{ inputs.force == true && '1' || '0' }}
       SKIP_PGP_CHECK: ${{ inputs.skip_pgp == true && '1' || '0' }}
@@ -50,17 +51,25 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+        with:
+          # The build runs downloaded PKGBUILDs as a local user: do not leave
+          # the GITHUB_TOKEN in .git/config, where that code could read it.
+          persist-credentials: false
 
       - name: Install build tools
         run: pacman -Syu --noconfirm --needed archlinux-keyring git curl sudo
 
       - name: Create the build user
-        # makepkg refuses to run as root: build as `builder` with
-        # passwordless sudo for --syncdeps.
+        # makepkg refuses to run as root: build as `builder`. Its only root
+        # need is `makepkg --syncdeps`, which runs `sudo pacman -S`, so
+        # passwordless sudo is granted for pacman alone — not for a shell,
+        # which would hand full root to any PKGBUILD.
         run: |
           set -euo pipefail
           useradd -m -s /bin/bash builder
-          echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+          printf '%s\n' 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman' > /etc/sudoers.d/builder
+          chmod 0440 /etc/sudoers.d/builder
+          visudo -cf /etc/sudoers.d/builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
       - name: Discover the PKGBUILDs
@@ -132,21 +141,6 @@ jobs:
           include-hidden-files: true
           retention-days: 3
 
-      - name: Configure GitHub Pages
-        if: steps.meta.outputs.count != '0'
-        uses: actions/configure-pages@v6
-
-      - name: Package the repository for Pages
-        if: steps.meta.outputs.count != '0'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: repo
-
-      - name: Deploy to Pages
-        if: steps.meta.outputs.count != '0'
-        id: deployment
-        uses: actions/deploy-pages@v5
-
       - name: Summary
         if: always()
         run: |
@@ -157,3 +151,37 @@ jobs:
             exit 1
           fi
           echo "All packages were built."
+
+  # Separate job on purpose: it holds the only token that can write to Pages,
+  # and it runs the artifact produced by the build — never a PKGBUILD.
+  deploy:
+    needs: build
+    if: >-
+      success() && github.ref == 'refs/heads/main' &&
+      needs.build.outputs.count != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Download the repository built by the build job
+        uses: actions/download-artifact@v8
+        with:
+          name: repo-pacman
+          path: repo
+
+      - name: Package the repository for Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: repo
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
