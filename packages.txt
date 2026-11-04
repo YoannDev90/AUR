@@ -16,3 +16,20 @@
 # '#' starts a comment. This file may stay empty.
 #
 https://github.com/YoannDev90/Github-Trend/releases/latest/download/PKGBUILD
+
+# android-tools suite (Rust workspace): one PKGBUILD per tool, all built
+# from the same release tarball. Re-downloaded on every run, so a
+# regenerated PKGBUILD (scripts/make_pkgbuild.py in that repository) is
+# picked up here without any push.
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/apkctl/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/assetgen/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/dp2px/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/iconkit/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/layoutlint/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/logstream/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/perfpoll/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/resclean/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/scenediff/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/startperf/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/svg2vd/PKGBUILD
+https://raw.githubusercontent.com/YoannDev90/android-tools/main/packaging/arch/uitool/PKGBUILD
