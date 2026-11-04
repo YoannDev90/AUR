@@ -42,7 +42,8 @@ everything else is read as a `PKGBUILD` file.
    script) changed; everything else is restored from the cache
 4. **repository** — `repo-add` generates `aur-bin.db` / `aur-bin.files` + the
    packages
-5. **publish** — GitHub Pages + `repo-pacman` artifact (14-day retention)
+5. **publish** — GitHub Pages + `repo-pacman` artifact (3-day retention) and
+   `build-logs` artifact (14-day retention)
 6. **daily** — a build also runs every day at 04:30 UTC to pick up AUR
    updates
 
@@ -61,17 +62,22 @@ Without it, the build succeeds but the deployment fails.
 In `/etc/pacman.conf`:
 
 ```ini
-[AUR-bin]
+[aur-bin]
 Server = https://<your-user>.github.io/<your-repo>
 SigLevel = Optional TrustAll
 ```
 
 Then `sudo pacman -Syu`.
 
+- **The section name must be exactly `REPO_NAME`** (`aur-bin` by default,
+  see `scripts/common.sh`). pacman downloads `<section>.db`, GitHub Pages is
+  case-sensitive: `[AUR-bin]` would look for `AUR-bin.db` and get a 404.
+- The URL depends on the git repository name (this repository is served as
+  `https://yoanndev90.github.io/AUR`).
 - `SigLevel = Optional TrustAll` is **required**: packages are unsigned (no
   GPG key to manage), otherwise pacman would refuse them.
-- The URL depends on the git repository name (e.g. repo `yoann/Documents/AUR`
-  pushed to GitHub as `yoann.github.io/AUR`).
+- Only `x86_64` binaries are produced (the GitHub runner architecture), even
+  when a PKGBUILD declares other architectures.
 
 ## Forcing / debugging
 
@@ -83,8 +89,22 @@ Then `sudo pacman -Syu`.
 | `skip_pgp` | `--skippgpcheck` if a source PGP key is missing   |
 | `nocheck`  | `--nocheck` if `check()` breaks in CI             |
 
-Logs for each package: the run's *Summary* tab, and `.ci/logs/<name>.log`
-in the artifact. Locally (Arch + `base-devel` required):
+Logs for each package: the run's *Summary* tab (a markdown table is written
+to `$GITHUB_STEP_SUMMARY`), and `.ci/logs/<name>.log` in the **`build-logs`**
+artifact (kept 14 days, uploaded even when the build fails). The `repo-pacman`
+artifact is the same content as Pages, kept 3 days.
+
+The same options exist as environment variables for a local run:
+
+| variable           | effect                                       |
+| ------------------ | -------------------------------------------- |
+| `FORCE_REBUILD=1`  | rebuild every package, ignore the cache       |
+| `SKIP_PGP_CHECK=1` | pass `--skippgpcheck` to makepkg              |
+| `NO_CHECK=1`       | pass `--nocheck` to makepkg                   |
+| `REPO_NAME=<name>` | name of the generated `*.db` / `*.files`      |
+
+Locally (Arch + `base-devel` required, **as a normal user**: makepkg refuses
+to run as root):
 
 ```sh
 bash scripts/discover.sh
