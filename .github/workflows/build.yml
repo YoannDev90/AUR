@@ -105,6 +105,23 @@ jobs:
           path: pkgcache
           key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # The logs are the only way to diagnose a failing PKGBUILD once the run
+      # is over: upload them even when the build step failed.
+      - name: Publish the build logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-logs
+          path: .ci/
+          if-no-files-found: warn
+          # .ci is a hidden directory: upload-artifact skips hidden files
+          # unless this is set.
+          include-hidden-files: true
+          retention-days: 14
+
+      # Mirror of what Pages serves, for consumers that cannot use Pages.
+      # Short retention: it is regenerated on every run (57 MB today) and a
+      # daily build would otherwise exhaust the artifact storage quota.
       - name: Publish the repository as an artifact
         if: steps.meta.outputs.count != '0'
         uses: actions/upload-artifact@v6
@@ -112,7 +129,8 @@ jobs:
           name: repo-pacman
           path: repo/
           if-no-files-found: error
-          retention-days: 14
+          include-hidden-files: true
+          retention-days: 3
 
       - name: Configure GitHub Pages
         if: steps.meta.outputs.count != '0'
