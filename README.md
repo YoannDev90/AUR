@@ -52,6 +52,11 @@ If a PKGBUILD fails, the other packages are **published anyway**; the job
 ends in red and the failing package name shows up in the summary and in the
 *Summary* tab.
 
+Before all of this, a **lint** job runs `shellcheck` on the scripts and
+`actionlint` on the workflow, on pushes and pull requests. A pull request
+additionally runs the whole build (discovery + compilation) as a check, but
+**never deploys**: only `main` publishes.
+
 ## One-time setup
 
 **Settings → Pages → Build and deployment → Source: GitHub Actions.**

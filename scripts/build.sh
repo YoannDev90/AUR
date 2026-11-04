@@ -15,6 +15,7 @@
 # publication of the other packages nor the end of the script.
 set -euo pipefail
 
+# shellcheck source=scripts/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 TSV="$CI_DIR/packages.tsv"
@@ -111,6 +112,8 @@ done <"$TSV"
   printf '### Packages\n\n| package | result |\n| --- | --- |\n'
   while IFS=$'\t' read -r base _dir; do
     [[ -n "$base" ]] || continue
+    # The backticks are literal markdown, not a command substitution.
+    # shellcheck disable=SC2016
     printf '| `%s` | %s |\n' "$base" "${STATUS[$base]:-not built}"
   done <"$TSV"
   printf '\n**%d** rebuilt, **%d** up to date, **%d** failed.\n' \
@@ -219,6 +222,8 @@ done <"$TSV"
 
 [[ "${#pkg_files[@]}" -gt 0 ]] || die "no binary to publish (did every build fail?)"
 
+# repo-add stores the plain file names; a leading ./ would end up in the db.
+# shellcheck disable=SC2035
 (cd "$REPO_DIR" && repo-add "$REPO_NAME.db.tar.gz" *.pkg.tar.*)
 
 # GitHub Pages does not follow symbolic links: we materialize the

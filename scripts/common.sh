@@ -6,7 +6,9 @@ BUILD_DIR="${BUILD_DIR:-$ROOT/build}"     # PKGBUILDs fetched by URL
 CACHE_DIR="${CACHE_DIR:-$ROOT/pkgcache}"  # already built binaries (cache)
 REPO_DIR="${REPO_DIR:-$ROOT/repo}"        # assembled pacman repository
 CI_DIR="${CI_DIR:-$ROOT/.ci}"             # run metadata
+# shellcheck disable=SC2034  # read by the scripts that source this file
 LOG_DIR="$CI_DIR/logs"
+# shellcheck disable=SC2034  # read by the scripts that source this file
 MANIFEST="$ROOT/packages.txt"
 REPO_NAME="${REPO_NAME:-aur-bin}"
 

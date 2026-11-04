@@ -5,6 +5,7 @@
 # Writes the list to .ci/packages.tsv and the discovered count to .ci/count.
 set -euo pipefail
 
+# shellcheck source=scripts/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 # URL PKGBUILDs are fetched again on every run: that is what lets us

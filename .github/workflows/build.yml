@@ -11,6 +11,14 @@ on:
   schedule:
     # Daily build to pick up AUR updates.
     - cron: "30 4 * * *"
+  pull_request:
+    # Validation only: a PR builds but never deploys (see the deploy job).
+    branches: [main, master]
+    paths:
+      - "packages/**"
+      - "packages.txt"
+      - "scripts/**"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
     inputs:
       force:
@@ -46,6 +54,34 @@ defaults:
     shell: bash
 
 jobs:
+  lint:
+    # Static checks, no Arch container needed.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q shellcheck
+          fi
+          shellcheck -x scripts/*.sh
+
+      # actionlint also runs shellcheck over the run: blocks below.
+      - name: actionlint
+        run: |
+          version=v1.7.12
+          curl -fsSL --retry 3 --max-time 120 -o /tmp/actionlint.tgz \
+            "https://github.com/rhysd/actionlint/releases/download/${version}/actionlint_${version#v}_linux_amd64.tar.gz"
+          tar xzf /tmp/actionlint.tgz -C /tmp actionlint
+          /tmp/actionlint -color
+
   build:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
