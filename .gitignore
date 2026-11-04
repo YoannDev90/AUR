@@ -3,6 +3,7 @@
 /pkgcache/
 /repo/
 /.ci/
+/.cache/
 
 # makepkg artifacts generated locally
 *.pkg.tar.*

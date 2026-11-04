@@ -12,6 +12,11 @@ LOG_DIR="$CI_DIR/logs"
 MANIFEST="$ROOT/packages.txt"
 REPO_NAME="${REPO_NAME:-aur-bin}"
 
+# Reuse downloaded sources across local runs: makepkg honours the
+# environment as long as /etc/makepkg.conf does not set SRCDEST itself
+# (it is commented out by default). Fresh CI workspaces simply ignore it.
+export SRCDEST="${SRCDEST:-$ROOT/.cache/sources}"
+
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf 'WARNING: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
