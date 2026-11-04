@@ -1,5 +1,8 @@
 # AUR (binaries)
 
+[![AUR binary repository](https://github.com/YoannDev90/AUR/actions/workflows/build.yml/badge.svg)](https://github.com/YoannDev90/AUR/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 This repository **builds the binaries of the PKGBUILDs you list** and publishes a
 **complete pacman repository** (`aur-bin.db`, `aur-bin.files` + the packages) on
 GitHub Pages.
@@ -48,10 +51,17 @@ everything else is read as a `PKGBUILD` file.
    and `build-logs` artifact (14-day retention)
 6. **daily** — a build also runs every day at 04:30 UTC to pick up AUR
    updates
+7. **housekeeping** — caches of previous runs are pruned, and a failing
+   daily build opens (or comments on) a `scheduled-build-failure` issue so
+   it does not go unnoticed
 
-If a PKGBUILD fails, the other packages are **published anyway**; the job
-ends in red and the failing package name shows up in the summary and in the
-*Summary* tab.
+The run is **fail-closed**: a failing PKGBUILD or a manifest entry that
+cannot be fetched turns the job red and **nothing is deployed** — the
+repository already published on Pages stays exactly as it was, so a
+transient upstream error can never silently unpublish a package. Every
+broken entry is listed in the *Summary* tab (discovery does not stop at the
+first one); fix or remove it, then re-run. An empty manifest is not an
+error: nothing is deployed and the previous repository stays live.
 
 Before all of this, a **lint** job runs `shellcheck` on the scripts and
 `actionlint` on the workflow, on pushes and pull requests. A pull request
@@ -123,6 +133,40 @@ bash scripts/build.sh     # results in repo/
 bash scripts/summary.sh   # renders .ci/summary.md, exits 1 if something failed
 ```
 
+## Trust model
+
+Read this before listing a third-party PKGBUILD.
+
+- **Every entry is code executed in CI.** On each run — including the
+  daily schedule — the PKGBUILDs from `packages.txt` and `packages/*/` run
+  as the build user, with `sudo` limited to `pacman`. A malicious PKGBUILD
+  can therefore shape the build environment and every package the run
+  produces.
+- **The URLs in `packages.txt` are your trust root.** A compromised AUR
+  account, a hijacked release asset or a poisoned raw file becomes a
+  compromised binary repository for every consumer of your `pacman.conf`.
+- **Packages are unsigned.** Consumers rely on
+  `SigLevel = Optional TrustAll`: integrity stops at GitHub Pages (HTTPS).
+  GPG signing is a possible future improvement.
+- **What the CI limits.** The build job holds a read-only token, persists
+  no git credentials, and may only `sudo pacman`. The deploy job never
+  executes a PKGBUILD and is the only one holding the Pages token (see
+  `.github/workflows/build.yml`). A pull request never deploys.
+- **Fail-closed publication** (see *Build flow*): any failed or skipped
+  entry blocks the deployment, so a transient upstream error cannot
+  unpublish your packages — but it also freezes the published state until
+  you fix the entry.
+
+### Reducing your exposure
+
+- Vendor the packages you cannot afford to lose: copy the PKGBUILD into
+  `packages/<name>/PKGBUILD` instead of listing a live URL. A vendored
+  PKGBUILD only changes when you push and review it.
+- Treat `packages.txt` as a supply-chain allow-list: review its diffs like
+  code.
+- Prefer upstreams you trust, and re-verify any URL you do not control
+  whenever it updates.
+
 ## Limitations
 
 - **Unsigned packages** — see `SigLevel` above.
@@ -135,3 +179,7 @@ bash scripts/summary.sh   # renders .ci/summary.md, exits 1 if something failed
 - **Size** — GitHub Pages is designed for ~1 GB; beyond that, the script
   already produces a standard pacman repository, a plain `rsync` to another
   host is enough.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
