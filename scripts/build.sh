@@ -29,6 +29,8 @@ if [[ "${NO_CHECK:-0}" == "1" ]]; then extra_flags+=(--nocheck); fi
 failures=()
 rebuilt=0
 kept=0
+# Final state of every package, rendered as markdown in $GITHUB_STEP_SUMMARY.
+declare -A STATUS=()
 
 # 1. Build -----------------------------------------------------------------
 while IFS=$'\t' read -r base dir; do
@@ -48,6 +50,7 @@ while IFS=$'\t' read -r base dir; do
   if [[ "$FORCE" != "1" && -f "$cache/.stamp" &&
     "$(cat "$cache/.stamp")" == "$stamp" && "$count" -ge "$expected" ]]; then
     log "up to date: $base ($count package(s))"
+    STATUS[$base]="up to date ($count package(s))"
     kept=$((kept + 1))
     continue
   fi
@@ -69,6 +72,7 @@ while IFS=$'\t' read -r base dir; do
     done
     if [[ "$built" -lt "$expected" ]]; then
       warn "incomplete build for $base ($built/$expected package(s)) — see $logfile"
+      STATUS[$base]="failed — only $built/$expected package(s) built"
       failures+=("$base")
       rm -rf "$staging"
       continue
@@ -77,16 +81,31 @@ while IFS=$'\t' read -r base dir; do
     mv "$staging" "$cache"
     printf '%s\n' "$stamp" >"$cache/.stamp"
     rebuilt=1
+    STATUS[$base]="built ($built package(s))"
     log "ok: $base ($built package(s))"
   else
     warn "failed: $base — see $logfile"
     tail -n 25 "$logfile" >&2 || true
+    STATUS[$base]="failed"
     failures+=("$base")
   fi
 done <"$TSV"
 
 # 2. Failure report (before assembly, so it stays visible even if the
 #    rest crashes) -----------------------------------------------------------
+# Markdown table of every package: the workflow appends this file to
+# $GITHUB_STEP_SUMMARY. Written to a file because the script runs under
+# `sudo -u builder`, and sudo strips that variable from the environment.
+{
+  printf '### Packages\n\n| package | result |\n| --- | --- |\n'
+  while IFS=$'\t' read -r base _dir; do
+    [[ -n "$base" ]] || continue
+    printf '| `%s` | %s |\n' "$base" "${STATUS[$base]:-not built}"
+  done <"$TSV"
+  printf '\n**%d** rebuilt, **%d** up to date, **%d** failed.\n' \
+    "$rebuilt" "$kept" "${#failures[@]}"
+} >"$CI_DIR/summary.md"
+
 : >"$CI_DIR/failures.txt"
 if [[ "${#failures[@]}" -gt 0 ]]; then
   printf '%s\n' "${failures[@]}" | sort -u >"$CI_DIR/failures.txt"
