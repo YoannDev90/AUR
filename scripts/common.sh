@@ -14,6 +14,13 @@ log()  { printf '==> %s\n' "$*"; }
 warn() { printf 'WARNING: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+# makepkg refuses to run as root, and the failure surfaces later as the
+# misleading "unreadable PKGBUILD" (its root check happens before
+# --printsrcinfo). Say what is really wrong, right away.
+if [[ $EUID -eq 0 ]]; then
+  die "run as a normal user: makepkg refuses to run as root"
+fi
+
 # Records a value for the workflow. A file is used instead of $GITHUB_OUTPUT:
 # the scripts run under `sudo -u builder`, and sudo strips $GITHUB_OUTPUT from
 # the environment. A separate root step reads .ci/<name>.
@@ -37,9 +44,18 @@ pkgname_count_of() {
   printf '%s' "$info" | grep -c '^[[:space:]]*pkgname = ' || true
 }
 
-# Fingerprint of a PKGBUILD + of the repository scripts: if either changes,
-# the binary must be rebuilt.
+# Fingerprint of a PKGBUILD + of the repository scripts and workflow: if
+# any of them changes, the binary must be rebuilt (the workflow picks the
+# makepkg flags, so a flag change has to invalidate the cache too).
+# Only the contents are hashed, never the paths, so a different checkout
+# directory does not invalidate the cache.
 stamp_of() {
-  local dir="$1"
-  { cat "$dir/PKGBUILD"; cat "$ROOT"/scripts/*.sh; } | sha256sum | cut -d' ' -f1
+  local dir="$1" f
+  local -a extra=()
+  for f in "$ROOT"/scripts/*.sh "$ROOT"/.github/workflows/*.yml; do
+    if [[ -f "$f" ]]; then
+      extra+=("$f")
+    fi
+  done
+  { cat "$dir/PKGBUILD"; cat "${extra[@]}"; } | sha256sum | cut -d' ' -f1
 }

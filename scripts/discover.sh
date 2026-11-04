@@ -33,13 +33,17 @@ register_url() {
   tmp="$(mktemp -d "$BUILD_DIR/.fetch.XXXXXX")"
   if [[ "$url" == *.git ]]; then
     log "clone: $url"
-    git clone --depth 1 --quiet "$url" "$tmp/src" || die "clone failed: $url"
+    # Bounded: a hung clone would otherwise occupy the runner until the
+    # workflow timeout.
+    timeout --kill-after=30 180 git clone --depth 1 --quiet "$url" "$tmp/src" ||
+      die "clone failed: $url"
     [[ -f "$tmp/src/PKGBUILD" ]] || die "no PKGBUILD in $url"
     mv "$tmp/src/PKGBUILD" "$tmp/PKGBUILD"
     rm -rf "$tmp/src"
   else
     log "download: $url"
-    curl -fsSL --retry 3 --retry-delay 2 -o "$tmp/PKGBUILD" "$url" ||
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+      --connect-timeout 10 --max-time 120 -o "$tmp/PKGBUILD" "$url" ||
       die "download failed: $url"
   fi
   base="$(pkgbase_of "$tmp")"
