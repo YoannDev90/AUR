@@ -251,7 +251,7 @@ jobs:
         # keep the newest ones only, to stay inside the 10 GB repository
         # quota. Best effort: a pruning problem must never fail the run.
         continue-on-error: true
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -273,7 +273,7 @@ jobs:
       # committer. Keep a single open issue and comment on it per failure.
       - name: Open an issue when the scheduled build fails
         if: github.event_name == 'schedule' && needs.build.result != 'success'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { owner, repo } = context.repo;
