@@ -80,7 +80,7 @@ In `/etc/pacman.conf`:
 
 ```ini
 [aur-bin]
-Server = https://<your-user>.github.io/<your-repo>
+Server = https://yoanndev90.github.io/AUR
 SigLevel = Optional TrustAll
 ```
 
