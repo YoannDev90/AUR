@@ -94,7 +94,7 @@ jobs:
       SKIP_PGP_CHECK: ${{ inputs.skip_pgp == true && '1' || '0' }}
       NO_CHECK: ${{ inputs.nocheck == true && '1' || '0' }}
       # A -git PKGBUILD is identical upstream from one day to the next:
-      # refresh those on the daily run only.
+      # refresh those on the daily run only (scripts/build.sh).
       FORCE_VCS: ${{ github.event_name == 'schedule' && '1' || '0' }}
     steps:
       - name: Check out the repository
@@ -189,49 +189,15 @@ jobs:
           include-hidden-files: true
           retention-days: 3
 
+      # The run summary lives in scripts/summary.sh so it can be linted and
+      # run locally. It reads .ci/summary.md, .ci/failures.txt and .ci/count
+      # itself; only the step outcomes have to come from the workflow.
       - name: Summary
         if: always()
         env:
-          COUNT: ${{ steps.meta.outputs.count }}
+          DISCOVER_OUTCOME: ${{ steps.discover.outcome }}
           BUILD_OUTCOME: ${{ steps.build.outcome }}
-        run: |
-          set -euo pipefail
-          to_summary() { printf '%s\n' "$*" >> "$GITHUB_STEP_SUMMARY"; }
-
-          if [[ -f .ci/summary.md ]]; then
-            cat .ci/summary.md >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [[ ! -f .ci/packages.tsv ]]; then
-            echo "::error::Discovery did not complete — see the Discover step."
-            exit 1
-          fi
-
-          if [[ -s .ci/failures.txt ]]; then
-            n="$(wc -l < .ci/failures.txt)"
-            {
-              echo
-              echo "### ${n} package(s) failed"
-              echo
-              sed 's/^/- /' .ci/failures.txt
-              echo
-              echo "Full logs: the \`build-logs\` artifact of this run."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::${n} package(s) could not be built — the last published version stays available."
-            sed 's/^/  - /' .ci/failures.txt
-            exit 1
-          fi
-
-          if [[ "$BUILD_OUTCOME" == "failure" ]]; then
-            echo "::error::The build stopped before completing — see the Build step."
-            exit 1
-          fi
-
-          if [[ "$COUNT" == "0" ]]; then
-            to_summary "No PKGBUILD discovered: nothing to publish."
-          else
-            to_summary "**All discovered packages were built.**"
-          fi
+        run: bash scripts/summary.sh
 
   # Separate job on purpose: it holds the only token that can write to Pages,
   # and it runs the artifact produced by the build — never a PKGBUILD.

@@ -55,7 +55,8 @@ stamp_of() {
   local dir="$1" f
   local -a extra=()
   for f in "$ROOT"/scripts/*.sh "$ROOT"/.github/workflows/*.yml; do
-    if [[ -f "$f" ]]; then
+    # summary.sh only renders the run summary: it must not force a rebuild.
+    if [[ -f "$f" && "$(basename "$f")" != "summary.sh" ]]; then
       extra+=("$f")
     fi
   done

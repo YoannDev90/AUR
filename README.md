@@ -39,7 +39,8 @@ everything else is read as a `PKGBUILD` file.
    `makepkg --syncdeps --cleanbuild --clean` (the PKGBUILD's `depends` and
    `makedepends` are installed automatically)
 3. **cache** — a binary is only rebuilt if its PKGBUILD (or a repository
-   script) changed; everything else is restored from the cache
+   script or the workflow) changed; everything else is restored from the
+   cache
 4. **repository** — `repo-add` generates `aur-bin.db` / `aur-bin.files` + the
    packages
 5. **publish** — GitHub Pages (`index.html` lists the packages and the
@@ -119,6 +120,7 @@ to run as root):
 ```sh
 bash scripts/discover.sh
 bash scripts/build.sh     # results in repo/
+bash scripts/summary.sh   # renders .ci/summary.md, exits 1 if something failed
 ```
 
 ## Limitations
