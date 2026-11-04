@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
@@ -98,7 +98,7 @@ jobs:
       FORCE_VCS: ${{ github.event_name == 'schedule' && '1' || '0' }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # The build runs downloaded PKGBUILDs as a local user: do not leave
           # the GITHUB_TOKEN in .git/config, where that code could read it.
@@ -132,7 +132,7 @@ jobs:
       - name: Restore already built binaries
         if: steps.meta.outputs.count != '0'
         id: cache
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: pkgcache
           key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
@@ -157,7 +157,7 @@ jobs:
 
       - name: Cache the binaries
         if: steps.meta.outputs.count != '0' && steps.result.outputs.rebuilt == 'true'
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: pkgcache
           key: pkgs-${{ github.run_id }}-${{ github.run_attempt }}
@@ -166,7 +166,7 @@ jobs:
       # is over: upload them even when the build step failed.
       - name: Publish the build logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: build-logs
           path: .ci/
@@ -181,7 +181,7 @@ jobs:
       # daily build would otherwise exhaust the artifact storage quota.
       - name: Publish the repository as an artifact
         if: steps.meta.outputs.count != '0'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: repo-pacman
           path: repo/
@@ -217,19 +217,86 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
       - name: Download the repository built by the build job
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: repo-pacman
           path: repo
 
       - name: Package the repository for Pages
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: repo
 
       - name: Deploy to Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+  # Housekeeping: runs no PKGBUILD, so it is the one job that may hold the
+  # write permissions the build job must never see.
+  maintenance:
+    name: Maintenance
+    needs: build
+    if: always() && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # prune the build caches
+      issues: write  # report failing scheduled runs
+    steps:
+      - name: Prune old caches
+        # Every rebuild saves a full copy of pkgcache under a unique key:
+        # keep the newest ones only, to stay inside the 10 GB repository
+        # quota. Best effort: a pruning problem must never fail the run.
+        continue-on-error: true
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const keep = 5;
+            const res = await github.request('GET /repos/{owner}/{repo}/actions/caches', {
+              owner, repo, per_page: 100,
+            });
+            const pkgs = (res.data.actions_caches || [])
+              .filter(c => (c.key || '').startsWith('pkgs-'))
+              .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+            for (const cache of pkgs.slice(keep)) {
+              core.info(`pruning cache ${cache.key} (${cache.created_at})`);
+              await github.request('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', {
+                owner, repo, cache_id: cache.id,
+              });
+            }
+
+      # Cron failures are easy to miss: GitHub only notifies the last
+      # committer. Keep a single open issue and comment on it per failure.
+      - name: Open an issue when the scheduled build fails
+        if: github.event_name == 'schedule' && needs.build.result != 'success'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const label = 'scheduled-build-failure';
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            try {
+              await github.rest.issues.createLabel({ owner, repo, name: label, color: 'd73a4a' });
+            } catch (e) {
+              if (e.status !== 422) throw e; // 422 = the label already exists
+            }
+            const { data } = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: label, per_page: 1,
+            });
+            if (data.length) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: data[0].number,
+                body: `The scheduled build failed again: ${runUrl}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo,
+                title: 'Scheduled AUR build failing',
+                labels: [label],
+                body: `The daily build failed.\n\nRun: ${runUrl}\n\nSee the run summary for the failing package(s).`,
+              });
+            }
