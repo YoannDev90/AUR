@@ -122,6 +122,73 @@ else
 fi
 
 # 3. Assemble the pacman repository ----------------------------------------
+# GitHub Pages does not list directories, so the repository also gets a
+# small index page: the pacman configuration to copy and the package list.
+write_index() {
+  local url="" gh_repo f name="" ver="" size
+  if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+    gh_repo="${GITHUB_REPOSITORY#*/}"
+    if [[ "$gh_repo" == *.github.io ]]; then
+      url="https://$gh_repo"
+    else
+      url="https://${GITHUB_REPOSITORY_OWNER:-<user>}.github.io/$gh_repo"
+    fi
+  fi
+  {
+    cat <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${REPO_NAME} — pacman repository</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto;
+         padding: 0 1rem; line-height: 1.5; color: #222; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #ddd; }
+  pre { background: #f5f5f5; padding: .8rem; overflow-x: auto; }
+  code, pre { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>${REPO_NAME}</h1>
+<p>Binary packages built from the PKGBUILDs of this repository, on every
+push and every day at 04:30&nbsp;UTC.</p>
+<h2>Add it to pacman</h2>
+<pre>[${REPO_NAME}]
+Server = ${url:-https://&lt;user&gt;.github.io/&lt;repo&gt;}
+SigLevel = Optional TrustAll</pre>
+<h2>Packages</h2>
+<table>
+<tr><th>Package</th><th>Version</th><th>Download size</th></tr>
+EOF
+    for f in "$REPO_DIR"/*.pkg.tar.*; do
+      if [[ ! -f "$f" || "$f" == *.sig ]]; then
+        continue
+      fi
+      # `pacman -Qp` prints "<name> <version>"; fall back to the file name
+      # when the query fails (pacman missing, damaged package, ...).
+      if ! read -r name ver < <(pacman -Qp "$f" 2>/dev/null) || [[ -z "$name" ]]; then
+        name="$(basename "$f")"
+        name="${name%.pkg.tar.*}"
+        ver="unknown"
+      fi
+      size="$(numfmt --to=iec --suffix=B "$(stat -c '%s' "$f")")"
+      printf '<tr><td><code>%s</code></td><td>%s</td><td>%s</td></tr>\n' \
+        "$name" "$ver" "$size"
+    done
+    cat <<EOF
+</table>
+<p>Built with <code>makepkg</code> and published with <code>repo-add</code>.
+Packages are unsigned.</p>
+</body>
+</html>
+EOF
+  } >"$REPO_DIR/index.html"
+  log "index: $REPO_DIR/index.html"
+}
+
 log "assembling repository $REPO_NAME"
 rm -rf "$REPO_DIR"
 mkdir -p "$REPO_DIR"
@@ -153,6 +220,8 @@ for link in "$REPO_DIR"/*.db "$REPO_DIR"/*.files; do
 done
 : >"$REPO_DIR/.nojekyll"
 shopt -u nullglob
+
+write_index
 
 # 4. Purge the cache of packages removed from the repository ---------------
 cut -f1 "$CI_DIR/packages.tsv" | sort -u >"$CI_DIR/bases.txt"

@@ -42,8 +42,9 @@ everything else is read as a `PKGBUILD` file.
    script) changed; everything else is restored from the cache
 4. **repository** — `repo-add` generates `aur-bin.db` / `aur-bin.files` + the
    packages
-5. **publish** — GitHub Pages + `repo-pacman` artifact (3-day retention) and
-   `build-logs` artifact (14-day retention)
+5. **publish** — GitHub Pages (`index.html` lists the packages and the
+   pacman configuration to copy) + `repo-pacman` artifact (3-day retention)
+   and `build-logs` artifact (14-day retention)
 6. **daily** — a build also runs every day at 04:30 UTC to pick up AUR
    updates
 
@@ -68,6 +69,9 @@ SigLevel = Optional TrustAll
 ```
 
 Then `sudo pacman -Syu`.
+
+Opening the repository URL in a browser shows an `index.html` with the
+package list and the same pacman configuration.
 
 - **The section name must be exactly `REPO_NAME`** (`aur-bin` by default,
   see `scripts/common.sh`). pacman downloads `<section>.db`, GitHub Pages is
