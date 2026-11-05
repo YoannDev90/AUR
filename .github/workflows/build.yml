@@ -243,8 +243,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: write # prune the build caches
-      issues: write  # report failing scheduled runs
+      actions: write # prune the build caches, download the run report
+      issues: write  # report failing runs
     steps:
       - name: Prune old caches
         # Every rebuild saves a full copy of pkgcache under a unique key:
@@ -269,18 +269,68 @@ jobs:
               });
             }
 
-      # Cron failures are easy to miss: GitHub only notifies the last
-      # committer. Keep a single open issue and comment on it per failure.
-      - name: Open an issue when the scheduled build fails
-        if: github.event_name == 'schedule' && needs.build.result != 'success'
+      # A failed run must never go unnoticed (GitHub only notifies the last
+      # committer): download the report the build job produced (summary table,
+      # skipped manifest entries, per-package logs) and keep a single open
+      # issue, one comment per failing run — logs included so any agent can
+      # audit and fix the failure from the issue alone. Pull requests are
+      # validation only: they must not create issue noise.
+      - name: Download the failing run's report
+        if: always() && github.event_name != 'pull_request' && needs.build.result != 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: build-logs
+          path: report
+
+      - name: Open an issue when the build fails
+        if: always() && github.event_name != 'pull_request' && needs.build.result != 'success'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const fs = require('fs');
             const { owner, repo } = context.repo;
-            const label = 'scheduled-build-failure';
+            const label = 'build-failure';
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            const read = (p) => {
+              try { return fs.readFileSync(p, 'utf8'); } catch { return ''; }
+            };
+            const summary = read('report/summary.md').trim();
+            const skipped = read('report/skipped.tsv').trim();
+            const failures = read('report/failures.txt').split('\n').filter(Boolean);
+
+            let body = `## Build failed\n\n`;
+            body += `- Run: ${runUrl}\n`;
+            body += `- Event: \`${context.eventName}\` — commit \`${context.sha.slice(0, 7)}\`\n\n`;
+            body += summary
+              ? `${summary}\n`
+              : '_The build stopped before writing a report: see the run summary._\n';
+            if (skipped) {
+              body += `\n### Skipped manifest entries\n\n\`\`\`\n${skipped}\n\`\`\`\n`;
+            }
+            if (failures.length) {
+              body += `\n### Failing package logs (last 150 lines)\n`;
+              for (const base of failures) {
+                const log = read(`report/logs/${base}.log`);
+                const lines = log.split('\n').slice(-150);
+                let tail = lines.join('\n');
+                if (tail.length > 12000) tail = `…(truncated)\n${tail.slice(-12000)}`;
+                const chunk = `\n<details><summary><code>${base}</code></summary>\n\n\`\`\`\n${tail || '(no log)'}\n\`\`\`\n</details>\n`;
+                if (body.length + chunk.length > 50000) {
+                  body += `\n_…and more logs: see the \`build-logs\` artifact of the run._\n`;
+                  break;
+                }
+                body += chunk;
+              }
+            }
+            body += `\nFull report: the \`build-logs\` artifact of the run (14 days).`;
+
             try {
-              await github.rest.issues.createLabel({ owner, repo, name: label, color: 'd73a4a' });
+              await github.rest.issues.createLabel({
+                owner, repo, name: label, color: 'd73a4a',
+                description: 'A package build failed',
+              });
             } catch (e) {
               if (e.status !== 422) throw e; // 422 = the label already exists
             }
@@ -289,14 +339,13 @@ jobs:
             });
             if (data.length) {
               await github.rest.issues.createComment({
-                owner, repo, issue_number: data[0].number,
-                body: `The scheduled build failed again: ${runUrl}`,
+                owner, repo, issue_number: data[0].number, body,
               });
             } else {
               await github.rest.issues.create({
                 owner, repo,
-                title: 'Scheduled AUR build failing',
+                title: 'AUR binary build failing',
                 labels: [label],
-                body: `The daily build failed.\n\nRun: ${runUrl}\n\nSee the run summary for the failing package(s).`,
+                body,
               });
             }

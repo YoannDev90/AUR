@@ -51,19 +51,29 @@ pkgname_count_of() {
   printf '%s' "$info" | grep -c '^[[:space:]]*pkgname = ' || true
 }
 
-# Fingerprint of a PKGBUILD + of the repository scripts and workflow: if
-# any of them changes, the binary must be rebuilt (the workflow picks the
-# makepkg flags, so a flag change has to invalidate the cache too).
-# Only the contents are hashed, never the paths, so a different checkout
+# Bump this constant when scripts/build.sh changes the *build semantics*
+# in a way that must invalidate every cached binary (new makepkg flags,
+# different staging logic, ...). Editing the scripts or the workflow alone
+# does NOT force a rebuild any more: the stamp only covers this constant
+# and the content of the package directory. (Alternative: force=true in
+# workflow_dispatch.)
+BUILD_BEHAVIOR=1
+
+# Fingerprint of a package directory: PKGBUILD, patches, extra sources...
+# makepkg's own work dirs (src/, pkg/), its logs and the built archives are
+# excluded so a build never changes the fingerprint it was built with.
+# Only contents are hashed, never absolute paths: a different checkout
 # directory does not invalidate the cache.
 stamp_of() {
-  local dir="$1" f
-  local -a extra=()
-  for f in "$ROOT"/scripts/*.sh "$ROOT"/.github/workflows/*.yml; do
-    # summary.sh only renders the run summary: it must not force a rebuild.
-    if [[ -f "$f" && "$(basename "$f")" != "summary.sh" ]]; then
-      extra+=("$f")
-    fi
-  done
-  { cat "$dir/PKGBUILD"; cat "${extra[@]}"; } | sha256sum | cut -d' ' -f1
+  local dir="$1"
+  (
+    cd -- "$dir" || exit 1
+    printf 'behavior=%s\n' "$BUILD_BEHAVIOR"
+    find . \
+      \( -path ./src -o -path ./pkg -o -name .git \
+        -o -name makepkg.log -o -name '*.pkg.tar.*' \) -prune -o \
+      -type f -print0 |
+      LC_ALL=C sort -z |
+      xargs -0 -r sha256sum
+  ) | sha256sum | cut -d' ' -f1
 }

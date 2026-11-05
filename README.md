@@ -38,11 +38,13 @@ everything else is read as a `PKGBUILD` file.
 ## Build flow
 
 1. **discovery** — `packages/*/PKGBUILD` + `packages.txt` → `.ci/packages.tsv`
-2. **build** — Arch container, non-root user,
-   `makepkg --syncdeps --cleanbuild --clean` (the PKGBUILD's `depends` and
-   `makedepends` are installed automatically)
-3. **cache** — a binary is only rebuilt if its PKGBUILD (or a repository
-   script or the workflow) changed; everything else is restored from the
+2. **build** — Arch container, non-root user, in two phases: dependencies
+   and sources first, serially (`makepkg --syncdeps --nobuild` — pacman has
+   a single global lock), then up to `BUILD_JOBS` packages (default 2)
+   compiled in parallel (`makepkg --noextract --clean`)
+3. **cache** — a binary is only rebuilt if the content of its package
+   directory (PKGBUILD, patches...) or the `BUILD_BEHAVIOR` constant in
+   `scripts/common.sh` changed; everything else is restored from the
    cache
 4. **repository** — `repo-add` generates `aur-bin.db` / `aur-bin.files` + the
    packages
@@ -51,9 +53,11 @@ everything else is read as a `PKGBUILD` file.
    and `build-logs` artifact (14-day retention)
 6. **daily** — a build also runs every day at 04:30 UTC to pick up AUR
    updates
-7. **housekeeping** — caches of previous runs are pruned, and a failing
-   daily build opens (or comments on) a `scheduled-build-failure` issue so
-   it does not go unnoticed
+7. **housekeeping** — caches of previous runs are pruned, and any failed
+   run (push, schedule or manual dispatch — pull requests excluded) opens,
+   or comments on, a rolling `build-failure` issue containing the report
+   and the last 150 lines of each failing package's log, so any agent can
+   audit and fix it from the issue alone
 
 The run is **fail-closed**: a failing PKGBUILD or a manifest entry that
 cannot be fetched turns the job red and **nothing is deployed** — the
@@ -118,6 +122,7 @@ The same options exist as environment variables for a local run:
 
 | variable           | effect                                       |
 | ------------------ | -------------------------------------------- |
+| `BUILD_JOBS=2`     | packages compiled in parallel (default 2)    |
 | `FORCE_REBUILD=1`  | rebuild every package, ignore the cache       |
 | `SKIP_PGP_CHECK=1` | pass `--skippgpcheck` to makepkg              |
 | `NO_CHECK=1`       | pass `--nocheck` to makepkg                   |
