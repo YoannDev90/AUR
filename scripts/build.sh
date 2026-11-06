@@ -183,7 +183,7 @@ for base in "${ready[@]}"; do
   rm -rf "$cache"
   mv "$staging" "$cache"
   printf '%s\n' "${STAMP[$base]}" >"$cache/.stamp"
-  rebuilt=1
+  rebuilt=$((rebuilt + 1))
   STATUS[$base]="built ($built package(s))"
   log "ok: $base ($built package(s))"
 done
@@ -215,7 +215,7 @@ if [[ "${#failures[@]}" -gt 0 ]]; then
     done
   fi
 fi
-if [[ "$rebuilt" -eq 1 ]]; then
+if [[ "$rebuilt" -gt 0 ]]; then
   set_output rebuilt true
 else
   set_output rebuilt false
